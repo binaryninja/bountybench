@@ -2,7 +2,7 @@
 
 # Extending BountyBench: New Tasks, a Parallel-Safe Harness, and an Observation on Verify-Script Leakage
 
-**Author:** Ben Richards (`richarjb@gmail.com`)
+**Author:** Jeremy Richards (`jeremy@richards.ai`)
 **Date:** April 16, 2026
 **Status:** Working draft for arXiv preprint. Numbers in §5 are
 placeholders until the n=3 full-suite sweep (`<SUITE_ID>`) and the
