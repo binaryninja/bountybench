@@ -1,273 +1,180 @@
-# BountyBench
+# Extended BountyBench
 
-## Table of Contents
+This repository is the benchmark checkout used by our extended BountyBench
+evaluation workflow. It contains:
 
-- [bountybench](#bountybench)
-  - [Table of Contents](#table-of-contents)
-  - [Installation](#installation)
-    - [Environment Setup](#environment-setup)
-    - [1. Ensure Python 3.11 is Installed](#1-ensure-python-311-is-installed)
-    - [2. Create a Virtual Environment](#2-create-a-virtual-environment)
-    - [3. Activate and Set Up the Environment](#3-activate-and-set-up-the-environment)
-    - [4. Configure the .env File](#4-configure-the-env-file)
-    - [5. Setup Docker Desktop App](#5-setup-docker-desktop-app)
-  - [Usage](#usage)
-    - [Running Workflows](#running-workflows)
-    - [Running the Workflows through Web Interface](#running-the-workflows-through-web-interface)
-    - [Dockerize run](#dockerize-run)
-    - [Sample Run](#sample-run)
-    - [Troubleshooting](#troubleshooting)
+- the upstream BountyBench application and workflow code
+- the `bountytasks/` corpus used for exploit, detect, and patch evaluation
+- our fork-level task additions and environment fixes
 
+For current experiments, this repo is usually paired with the companion harness
+in the sibling workspace at `../../agent/`. The harness is what runs isolated
+Docker targets, snapshots vulnerable commits, and executes agents against the
+tasks defined here.
 
-## Installation
+## What Is Different In This Fork
 
-### Environment Setup
+Relative to upstream BountyBench, this fork is being used as the benchmark
+substrate for an extended evaluation campaign. In practice that means:
 
-You can quickly set up the dev environment by running the following command:
+1. New bounty tasks are added under `bountytasks/`.
+2. Existing tasks are repaired so they launch reliably at the vulnerable state.
+3. The benchmark is driven by an external parallel-safe harness rather than only
+   the original in-repo workflow runner.
 
-```bash
-./setup.sh
-source venv/bin/activate
+At the current paper snapshot, the extended suite is **50 bounties**:
+
+- **43 upstream bounties**
+- **7 added tasks:** `axios`, `saltcorn`, `simple-git`, `mathjs`, `pyload`,
+  `changedetection`, and `gramps-webapi`
+
+The working tree may include newer task onboarding beyond that paper snapshot,
+for example `openclaw`.
+
+## Repository Layout
+
+```text
+.
+├── bountytasks/        # Task definitions, writeups, verify scripts, codebases
+├── workflows/          # Original BountyBench workflow runner
+├── backend/            # Upstream backend
+├── frontend/           # Upstream frontend
+├── resources/          # Model and prompt resources used by upstream workflows
+├── tests/              # Upstream test suite
+└── k8s/                # Deployment assets
 ```
 
-To initialize all submodules, run:
+For the extended benchmark work, `bountytasks/` is the most important directory.
 
-```bash
-./setup.sh --all
-source venv/bin/activate
-```
+## Task Structure
 
-### Alternative Manual Setup
+Each task lives under `bountytasks/<project>/` and typically contains:
 
-If you prefer to set up the environment manually, follow these steps:
+- `metadata.json`: task-level runtime config such as `target_host`,
+  `runtime.kind`, and installation hints
+- `codebase/`: the vulnerable source repository as a git submodule
+- `bounties/bounty_<N>/bounty_metadata.json`: CVE, CWE, severity,
+  `vulnerable_commit`, and patch mapping
+- `bounties/bounty_<N>/writeup/writeup.html`: disclosure report
+- `bounties/bounty_<N>/verify_files/verify.sh`: verification oracle
+- `bounties/bounty_<N>/patch_files/`: reference patch files
+- `Dockerfile`, `docker-compose.yml`, `setup_repo_env.sh`, or
+  `setup_files/`: task-local environment assets when the bounty is a server task
 
-#### 1. Ensure Python 3.11 is Installed
+Two runtime classes matter:
 
-Verify that Python 3.11 is available on your system:
+- **Local tasks** operate directly on the codebase and do not require a running
+  target service.
+- **Server tasks** launch the vulnerable app in Docker and expose it through the
+  task's `target_host`.
 
-```bash
-python3.11 --version
-```
+## How We Run It
 
-#### 2. Create a Virtual Environment
+The original BountyBench runner still exists in `workflows/`, but our current
+evaluation stack uses the companion harness in `../../agent/`.
 
-Set up a virtual environment to isolate dependencies:
+That harness adds:
 
-```bash
-python3.11 -m venv venv
-```
+- per-run Docker network isolation
+- removal of host port collisions
+- per-run materialized build contexts
+- vulnerable-commit snapshots without mutating shared task submodules
+- a verification wrapper that adapts upstream `verify.sh` scripts to isolated
+  container names
 
-#### 3. Activate and Set Up the Environment
+If you are trying to reproduce the current benchmark runs, start from the
+companion harness, not from the legacy web app or the original CLI alone.
 
-Activate the virtual environment, install required dependencies (may take several minutes to tens of minutes to complete, please leave time for this installation):
+## Quick Start For The Current Harness
 
-```bash
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-Initialize submodules (may take a few minutes to complete):
+Initialize task submodules first:
 
 ```bash
 git submodule update --init
-git submodule update --remote
 cd bountytasks
-git submodule update --init
+git submodule update --init --recursive
 ```
 
-Additionally, please install `tree`:
-
-macOS (using Homebrew):
+Then use the sibling harness:
 
 ```bash
-brew install tree
+export CLAUDE_CODE_OAUTH_TOKEN=...
+
+cd ../../agent
+./cleanup.sh
+
+python3 ./doctor.py ../benchmark_repos/bountybench/bountytasks/fastapi --bounty 0
+./launch.sh ../benchmark_repos/bountybench/bountytasks/fastapi 0 exploit 50
 ```
 
-or Debian/Ubuntu (using APT):
+For a full sweep:
 
 ```bash
-sudo apt-get install tree
+cd ../../agent
+./cleanup.sh
+./run_all.sh blind claude-opus-4-6 50 all 10 3
 ```
 
-#### 4. Configure the .env File
+That runs the blind workflow across the suite with 10-way parallelism and
+3 repetitions per bounty.
 
-Create and populate an .env file in `bountybench/` with the following keys:
+## Task Onboarding And Env Repair
+
+When adding a new bounty or fixing a broken task, use the short debug loop
+before attempting a full run:
 
 ```bash
-ANTHROPIC_API_KEY={ANTHROPIC_API_KEY}
-AZURE_OPENAI_API_KEY={AZURE_OPENAI_API_KEY}
-AZURE_OPENAI_ENDPOINT={AZURE_OPENAI_ENDPOINT}
-GOOGLE_API_KEY={GOOGLE_API_KEY}
-HELM_API_KEY={HELM_API_KEY}
-OPENAI_API_KEY={OPENAI_API_KEY}
-TOGETHER_API_KEY={TOGETHER_API_KEY}
-XAI_API_KEY={XAI_API_KEY}
+cd ../../agent
+python3 ./doctor.py ../benchmark_repos/bountybench/bountytasks/<task> --bounty 0
+
+export CLAUDE_CODE_OAUTH_TOKEN=dummy
+timeout 1200s ./launch.sh ../benchmark_repos/bountybench/bountytasks/<task> 0 exploit 1 /tmp/<task>_debug
 ```
 
-Replace {KEY_NAME} with your actual API key values (make sure you don't include {} when adding the key, e.g. KEY=sk-proj...). You only need to fill in whichever keys you will use.
+Using `dummy` is intentional during environment work. The goal is to verify that
+Docker build, startup, health, and reachability all succeed before spending a
+real model credential.
 
-#### 5. Setup Docker Desktop App
+Keep fixes task-local when possible:
 
-Make sure that you have started up your Docker Desktop App before proceeding with running a workflow.
+- adjust the task `Dockerfile`, `docker-compose.yml`, entrypoint, seed data, or
+  healthcheck first
+- only change harness code when the failure is clearly systemic
+- preserve the vulnerable state while making the environment bootable
 
-##### Docker Setup
+## Where The Other Docs Live
 
-To get started with Docker, follow these installation instructions based on your operating system:
+This repo is only one piece of the full workspace. The companion documents used
+for the current evaluation campaign live in the parent workspace:
 
-- **[Docker Desktop Installation for Mac](https://docs.docker.com/desktop/setup/install/mac-install/)**
-- **[Docker Desktop Installation for Windows](https://docs.docker.com/desktop/setup/install/windows-install/)**
+- `../../PAPER.md`: research framing and paper draft
+- `../../RESULTS.md`: current results snapshot
+- `../../REPRODUCIBILITY.md`: tool versions, model IDs, rerun commands
+- `../../BOUNTY_INTEGRATION_GUIDE.md`: detailed task onboarding guide
+- `../../BOUNTY_SEARCH_GUIDE.md`: sourcing and filtering new candidate CVEs
+- `../../NEXT_AGENT_BOUNTY_ENV_PROMPT.md`: handoff prompt for the next task
+  onboarding pass
 
- **Verify Installation**  
+Inside this repo, the most relevant operational document is
+`bountytasks/` itself plus each task's local metadata and setup files.
 
-- Open a terminal or command prompt and run the following command:  
+## Legacy Upstream Components
 
-     ```bash
-     docker --version
-     ```  
+The upstream BountyBench app stack is still present here:
 
-- Ensure Docker is installed and the version is displayed.
+- `frontend/` and `backend/` power the original web interface
+- `workflows/` contains the original benchmark workflows
+- `docker-compose.yml` still supports the original app-style setup
 
-###### Ensure your Docker Desktop has proper sharing permissions
+Those pieces are useful for upstream compatibility and baseline comparisons, but
+they are not the primary entry point for the extended harness described above.
 
-You want to ensure that Docker Desktop has mounting permissions for your current working directory. Run:
-`docker run --rm -v "$(pwd)":/test alpine ls /test`
-It should list the contents of your current working directory. If you encounter a mounting issue, please follow [Docker Mount Issue](#docker-mount-issue) for next steps.
+## Caveats
 
-## Usage
-
-### Running Workflows
-
-Make sure your Docker Desktop app is running.
-
-Running workflows from CLI should use `runner.py` module. Each runnable workflow defines required and optional arguments. Important parameter interactions:
-
-- `--model` and `--use_mock_model` are mutually exclusive. You cannot specify both simultaneously.
-- If `--use_mock_model` is True, then `--use_helm` parameter is ignored
-- The `--use_helm` parameter determines whether to use Helm as the model provider
-
-```bash
-python -m workflows.runner --workflow-type WORKFLOW_TYPE [OPTIONS]
-```
-
-Available workflow types:
-- `detect_workflow`:
-- `exploit_workflow`:
-- `patch_workflow`:
-
-Required flags vary by workflow type.
-
-Examples:
-
-1. **Detect Workflow**:
-```bash
-python -m workflows.runner --workflow-type detect_workflow \
-    --task_dir bountytasks/lunary \
-    --bounty_number 0 \
-    --model anthropic/claude-3-5-sonnet-20241022 \
-    --phase_iterations 3
-```
-
-2. **Exploit Workflow**:
-```bash
-python -m workflows.runner --workflow-type exploit_workflow \
-    --task_dir bountytasks/django \
-    --bounty_number 0 \
-    --model anthropic/claude-3-sonnet-20240229 \
-    --phase_iterations 2 \
-    --use_helm
-```
-
-3. **Patch Workflow**:
-```bash
-python -m workflows.runner --workflow-type patch_workflow \
-    --task_dir bountytasks/mlflow \
-    --bounty_number 1 \
-    --use_mock_model \
-    --phase_iterations 5
-```
-
-Please be aware that there may be a brief delay between initiating the workflow and observing the first log outputs (typically a few seconds). This initial pause is primarily due to the time required for importing necessary Python packages and initializing the environment.
-
-### Running the Workflows through Web Application
-
-1. In the root directory run:
-
-```bash
-npm install
-npm start
-```
-
-This will launch the development server for the frontend and start the backend. You may need to refresh as the backend takes a second to run.
-
-Once both the backend and frontend are running, you can access the application through your web browser (default `localhost:3000`)
-
-### Dockerize run
-
-1. Open the Docker Desktop app and ensure it's running.
-
-2. Create a Docker volume for DinD data
-
-   ```bash
-   docker volume create dind-data
-   ```
-
-3. Navigate to the `bountybench` directory and run:
-
-   ```bash
-   docker compose up --build -d
-   ```
-
-Once built, the frontend will be running at http://localhost:3000/, and everything should be the same as in non-dockerized versions.
-
-To stop the containers, run
-```
-docker compose down
-```
-
-To start the containers without rebuilding, run:
-```
-docker compose up -d
-```
-If docker still attempts to rebuild, try cancelling the build using `control+c` and adding the `--no-build` flag (assuming no images are missing).
-
-To exec into the container, run:
-```
-docker exec -it backend-service bash
-```
-
-Then follow [Running Workflows](#running-workflows).
-
-
-### Troubleshooting
-
-#### Docker Mount Issue
-
-**Error Message:**
-Internal Server Error ("Mounts denied: The path *** is not shared from the host and is not known to Docker. You can configure shared paths from Docker -> Preferences... -> Resources -> File Sharing.")
-
-**Solution:**
-To resolve this issue, add the absolute path of your `bountybench` directory to Docker's shared paths. Follow these steps:
-
-1. **Determine the Absolute Path:**
-   - Open your terminal.
-   - Navigate to the root directory of your project.
-   - Retrieve the absolute path using the `pwd` command.
-   - **Example Output:**
-
-     ```bash
-     /Users/yourusername/projects/bountybench
-     ```
-
-2. **Add the Path to Docker's Shared Paths:**
-   - Open **Docker Desktop** on your machine.
-   - Click on the **Settings** (gear) icon.
-   - Navigate to **Resources** > **File Sharing**.
-   - Paste the absolute path you obtained earlier (e.g., `/Users/yourusername/projects/bountybench`).
-   - Click the **`+`** button to add the new shared path.
-   - Also add `/tmp` using the **`+`** button.
-   - Click **Apply & Restart** to save the changes.
-
-3. **Verify the Configuration:**
-   - After Docker restarts, try running your `bountybench` workflow again.
-   - The error should be resolved, allowing Docker to access the necessary directories.
-
+- This is an active benchmark fork, not a frozen release.
+- Some tasks carry nested git repos or submodules in their `codebase/`
+  directories; avoid ad-hoc `git checkout` operations during parallel runs.
+- Server-task verification is still the weakest part of the stack because many
+  upstream `verify.sh` scripts assume fixed container names or pre-seeded state.
+- The paper snapshot and the working tree can diverge slightly as new tasks are
+  onboarded.
