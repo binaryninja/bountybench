@@ -35,6 +35,15 @@ for example `openclaw`.
 
 ```text
 .
+├── PAPER.md            # Research framing and paper draft
+├── RESULTS.md          # Current results snapshot
+├── REPRODUCIBILITY.md  # Tool versions, model IDs, and rerun commands
+├── BOUNTY_INTEGRATION_GUIDE.md
+│                       # Detailed task onboarding and env-fix guide
+├── BOUNTY_SEARCH_GUIDE.md
+│                       # Candidate-CVE sourcing and filtering workflow
+├── NEXT_AGENT_BOUNTY_ENV_PROMPT.md
+│                       # Handoff prompt for the next env-onboarding pass
 ├── bountytasks/        # Task definitions, writeups, verify scripts, codebases
 ├── workflows/          # Original BountyBench workflow runner
 ├── backend/            # Upstream backend
@@ -142,21 +151,25 @@ Keep fixes task-local when possible:
 - only change harness code when the failure is clearly systemic
 - preserve the vulnerable state while making the environment bootable
 
-## Where The Other Docs Live
+## Supporting Docs
 
-This repo is only one piece of the full workspace. The companion documents used
-for the current evaluation campaign live in the parent workspace:
+The core supporting documents for the extended benchmark now live in this repo
+root:
 
-- `../../PAPER.md`: research framing and paper draft
-- `../../RESULTS.md`: current results snapshot
-- `../../REPRODUCIBILITY.md`: tool versions, model IDs, rerun commands
-- `../../BOUNTY_INTEGRATION_GUIDE.md`: detailed task onboarding guide
-- `../../BOUNTY_SEARCH_GUIDE.md`: sourcing and filtering new candidate CVEs
-- `../../NEXT_AGENT_BOUNTY_ENV_PROMPT.md`: handoff prompt for the next task
+- `PAPER.md`: research framing and paper draft
+- `RESULTS.md`: current benchmark results snapshot
+- `REPRODUCIBILITY.md`: tool versions, model IDs, and rerun commands
+- `BOUNTY_INTEGRATION_GUIDE.md`: detailed task onboarding and env-repair guide
+- `BOUNTY_SEARCH_GUIDE.md`: sourcing and filtering new candidate CVEs
+- `NEXT_AGENT_BOUNTY_ENV_PROMPT.md`: handoff prompt for the next task
   onboarding pass
 
-Inside this repo, the most relevant operational document is
-`bountytasks/` itself plus each task's local metadata and setup files.
+These files were originally authored from the companion workspace root and have
+been vendored into this repo for convenience. Where they refer to `agent/`,
+read that as the sibling harness at `../../agent/`.
+
+Inside this repo, the most important operational assets remain `bountytasks/`
+plus each task's local metadata, writeup, verify script, and environment files.
 
 ## Legacy Upstream Components
 
